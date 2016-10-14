@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-// バグ報告や要望は shomasd(at)gmail.com もしくはtwitterの @tsukimizake774 まで。
+// バグ報告や要望は 適当にissue立ててください。
 // とりあえずMITライセンスです。
 // アンダースコアで始まる変数や関数を直接使った場合や、キャストでconstを外してデータを変更した場合の動作保証はできません
 
