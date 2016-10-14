@@ -1,5 +1,4 @@
 #include <stdio.h>
-
 #include <string.h>
 #include <stdlib.h>
 
@@ -20,10 +19,21 @@ char const * strData(String const* const s);
 String* strCreat(char const* const s){
   String * tmp = (String*) malloc(sizeof(String));
   int length = strlen(s);
-  tmp -> _data = malloc(sizeof(char) * length);
+  tmp -> _data = (char*)malloc(sizeof(char) * length);
   strcpy(tmp -> _data, s);
   tmp -> _dataLength = length;
   tmp -> _bufferLength = length;
+  return tmp;
+}
+
+// 何文字くらいまで増えそうか最初からわかっている場合はこちらを使うとmalloc回数を減せる
+String* strCreatn(char const* const s, int initialLength){
+  String * tmp = (String*) malloc(sizeof(String));
+  int dataLength = strlen(s);
+  tmp -> _data = (char*)malloc(sizeof(char) * initialLength);
+  strcpy(tmp -> _data, s);
+  tmp -> _dataLength = dataLength;
+  tmp -> _bufferLength = initialLength;
   return tmp;
 }
 
@@ -32,8 +42,8 @@ String* strCreat(char const* const s){
 
 /* } */
 
-// バッファサイズは余裕をもって増やしていく。文字数10なら16, 文字数100なら128。最小値をセットできるようにしてもいいかも。
-int _strMinBuffLength(int dataLength){
+// バッファサイズは余裕をもって増やしていく。文字数100なら128、300なら512。
+int const _strMinBuffLength(int const dataLength){
   int res = 1;
   while(res <= dataLength){
     res *= 2;
@@ -41,18 +51,21 @@ int _strMinBuffLength(int dataLength){
   return res;
 }
 
-// 長さnewBufSizeにメモリを再確保する。十分な長さが確保されていても再確保する。値はセットし直す。
-void _strReallocate(String * s, int const newBufSize){
-  char * tmp = realloc(s -> _data, sizeof(char) * newBufSize);
-  if(tmp != NULL){ // 別の場所に確保された場合(reallocのman参照)
-    s -> _data = tmp;
+// 長さnewBufSizeにメモリを再確保する。十分な長さが確保されていても再確保する。
+void _strReallocate(String * const s, int const newBufSize){
+  char * tmp = (char*)realloc(s -> _data, sizeof(char) * newBufSize);
+
+  if(tmp == NULL){
+    printf("failed to reallocate memory!\n");
+    exit(1);
   }
+  s -> _data = tmp;
   s -> _bufferLength = newBufSize;
   
 }
 
 // 多めにメモリを確保したり、確保する必要がなければしなかったりする。
-void _strReallocateMaybe(String * s, int const newDataSize){
+void _strReallocateMaybe(String * const s, int const newDataSize){
   if(s -> _bufferLength >= newDataSize){ // バッファサイズが十分なら再確保しない
     /* printf("%d %d\n", s -> _bufferLength, newDataSize); */
     return;
@@ -73,7 +86,7 @@ int const strLength(String const* const s){
 }
 
 // lhsの右にrhsをくっつける。
-void strConcat(String* lhs, String const* const rhs){
+void strConcat(String * const lhs, String const* const rhs){
   int newDatLength = strLength(lhs) + strLength(rhs);
   int newBufLength = _strMinBuffLength(newDatLength);
   _strReallocateMaybe(lhs, newBufLength);
@@ -83,7 +96,7 @@ void strConcat(String* lhs, String const* const rhs){
 }
 
 // lhsをrhsで書き替える
-void strWriteC(String * dest, char const * const src){
+void strWriteC(String * const dest, char const * const src){
   int newDataLen = strlen(src);
   _strReallocateMaybe(dest, newDataLen);
   strcpy(dest -> _data, src);
@@ -91,7 +104,7 @@ void strWriteC(String * dest, char const * const src){
 }
 
 // lhsをrhsで書き替える
-void strWrite(String * dest, String const * const src){
+void strWrite(String * const dest, String const * const src){
   int newDataLen = src -> _dataLength;
   _strReallocateMaybe(dest, newDataLen);
   strcpy(dest -> _data, src -> _data);
@@ -99,22 +112,22 @@ void strWrite(String * dest, String const * const src){
 }
 
 // freeする。
-void strDelete(String * const s){
+void strDelete(String const * const s){
   free((void * )s -> _data);
   free((void * )s);
 }
 
-//destのidx番目にsrcを挿入する。成功すれば1、idxが大きすぎる場合-1を返す。(Cでのエラーチェックはよくわからん)
-int strInsert(String * dest, int idx, String const* const src){
+//destのidx番目にsrcを挿入する。idxがdestのlengthより大きい場合、末尾に挿入する
+int const strInsert(String * const dest, int const idx, String const* const src){
 
   int newsize = strLength(dest) + strLength(src);
   int destLength = strLength(dest);
-
+  /* printf("destlen:%d\n", destLength); */
   if(idx>destLength){
-    return -1;
+    return strInsert(dest, destLength, src);
   }
 
-  char * tmp = malloc(sizeof(char) * destLength);
+  char * tmp = (char*)malloc(sizeof(char) * destLength);
 
   strcpy(tmp, dest -> _data);
   _strReallocateMaybe(dest, newsize);
@@ -124,34 +137,38 @@ int strInsert(String * dest, int idx, String const* const src){
 
   // destの0からidx番目までを書き込む
   for(size_t i = 0; i<idx; ++i){
-    dest -> _data [iter]= tmp[i];
-    ++iter;
-  }
-
-  // srcを書き込む
-  for(size_t i = 0; i<strLength(src); ++i){
-    dest -> _data [iter]= src -> _data[i];
-    ++iter;
-  }
-
-  // destのidxから最後までを書き込む
-  for(size_t i = idx; i<destLength; ++i){
+    /* printf("%ld, %c ", iter,  tmp[i]); */
     dest -> _data[iter] = tmp[i];
     ++iter;
   }
+  /* printf("\n"); */
+  // srcを書き込む
+  for(size_t i = 0; i<strLength(src); ++i){
+    /* printf("%ld, %c ", iter,  src -> _data[i]); */
+    dest -> _data[iter] = src -> _data[i];
+    ++iter;
+  }
+  /* printf("\n"); */
+  // destのidxから最後までを書き込む
+  for(size_t i = idx; i<destLength; ++i){
+    /* printf("%ld, %c ", iter,  tmp[i]); */
+    dest -> _data[iter] = tmp[i];
+    ++iter;
+  }
+  dest -> _data[iter] = '\0';
   dest -> _dataLength = newsize;
-  return 1;
+  return 0;
 }
 
 //バッファサイズを実際のデータサイズまで縮める。メモリを節約したいときに。
-void strShrinkToFit(String * s){
+void strShrinkToFit(String * const s){
   if(s -> _bufferLength > s -> _dataLength){
     _strReallocate(s, s -> _dataLength);
   }
 }
 
 // strがqueryを含むか判定。含んでいたら始まりのインデックスを返す。
-int strFind(String const * const str, String const * const query){
+int const strFind(String const * const str, String const * const query){
   char const * const matchHead = strstr(strData(str), strData(query));
   if(matchHead != NULL){
     char const * const strHead = strData(str);
@@ -160,66 +177,20 @@ int strFind(String const * const str, String const * const query){
   return -1;
 }
 
-// 文字列切り出し。インデックスがおかしい場合NULLを返す。
-String * strSubst(String * s, int begin, int end){
-
-  if(begin>end){
-    return NULL;
+// 文字列切り出し。begin+countが文字列の長さを越える場合、最後までを返す。
+String * strSubst(String const * const s, int const begin, int const count){
+  if(begin + count > strLength(s)){
+    return strSubst(s, begin, strLength(s));
   }
-  if(end>strLength(s)){
-    return NULL;
-  }
+  
+  char * tmp = (char*)malloc(sizeof(char) * count);
+  /* printf("strdata:%s\n", strData(s)); */
 
-  int length = end - begin;
-  char * tmp = malloc(sizeof(char) * length); // tmp使わずすませたい(TODO)
-  strncpy(tmp, strData(s) + sizeof(char) * begin, length);
-
+  strncpy(tmp, strData(s) + begin, count);
+  tmp[count] = '\0';
+  /* printf("substtmp:%s\n", tmp); */
   String * res = strCreat(tmp);
   free((void*)tmp);
   return res;
-}
-
-
-int main(int argc, char** argv){
-  // 以下つかいかた
-
-  // strCreatでオブジェクト生成
-  String* s1 = strCreat("eueu");
-  printf("s1:%s\n", strData(s1));
-  String * s2 = strCreat("gaugau");
-
-  // strConcatで1つめに2つめをくっつける。バッファサイズ気にしなくていいよ!!!
-  strConcat(s1, s2);
-  printf("s1:%s\n", strData(s1));
-  printf("s1->length:%d\n", strLength(s1));
-
-  // strWriteCでchar * 型の値を書きこむ
-  strWriteC(s1, "hogehugahogehuga");
-  printf("s1:%s\n", strData(s1));
-  printf("s1->length:%d\n", strLength(s1));
-
-  // strWriteでString * 型の(略
-  String * s3 = strCreat("ugougougougo");
-  strWrite(s1, s3);
-  printf("s1:%s\n", strData(s1));
-  printf("s1->length:%d\n", strLength(s1));
-
-  // strInsertで挿入
-  strInsert(s1, 9, s2);
-  printf("s1:%s\n", strData(s1));
-  printf("s1->length:%d\n", strLength(s1));
-
-  // strFindで探す。インデックスが返る。
-  printf("s1:%s\n", strData(s1));
-  printf("s2:%s\n", strData(s2));
-  printf("found:%d\n", strFind(s1, s2));
-
-  //strSubstで部分文字列取得。
-  printf("%s\n", strData(strSubst(s1, 9, 15)));
-
-  // freeのかわりにstrDeleteで捨てないとリークするので注意
-  strDelete(s1);
-  strDelete(s2);
-  strDelete(s3);
 }
 
